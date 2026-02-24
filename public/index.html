@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 — Web Vulnerability Scanner</title>
+    <meta name="description"
+        content="Active web security scanner: XSS, SQLi, command injection, path traversal, OWASP headers, JS analysis, directory fuzzer.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <!-- ── Sidebar ──────────────────────────────────────────────────────── -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-brand">
+                <span class="brand-icon">💀</span>
+                <span class="brand-name">404</span>
+                <span class="brand-badge">AI</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="nav-item active" id="nav-scanner" onclick="showView('scanner')">
+                    <i class="fa fa-crosshairs"></i>
+                    <span>Scanner</span>
+                </button>
+                <button class="nav-item" id="nav-fuzzer" onclick="showView('fuzzer')">
+                    <i class="fa fa-folder-open"></i>
+                    <span>Fuzzer</span>
+                </button>
+                <button class="nav-item" id="nav-analyzer" onclick="showView('analyzer')">
+                    <i class="fa fa-code"></i>
+                    <span>Analyzer</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-section-label">Recent Scans</div>
+            <ul class="scan-history-list" id="scan-history-list">
+                <!-- Populated by JS -->
+            </ul>
+
+            <div class="sidebar-footer">
+                ⚠️ Educational use only
+            </div>
+        </aside>
+
+        <!-- ── Main ─────────────────────────────────────────────────────────── -->
+        <div class="main-wrapper">
+
+            <!-- Top Bar -->
+            <header class="topbar">
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">
+                    <i class="fa fa-bars"></i>
+                </button>
+                <div class="topbar-title" id="topbar-title">
+                    <i class="fa fa-crosshairs"></i>
+                    Scanner
+                </div>
+                <div class="topbar-actions">
+                    <!-- AI Toggle -->
+                    <div class="ai-toggle-pill" title="Enable Drana Infinity AI Analysis">
+                        <label class="ai-switch" for="aiToggle">
+                            <input type="checkbox" id="aiToggle">
+                            <span class="ai-slider"></span>
+                        </label>
+                        <span class="ai-toggle-label">🤖 AI</span>
+                    </div>
+                    <button id="report-btn" class="top-btn accent hidden">
+                        <i class="fa fa-file-pdf"></i> Export PDF
+                    </button>
+                    <div class="avatar" title="NexusGuard">NG</div>
+                </div>
+            </header>
+
+            <!-- Error Banner -->
+            <div class="error-banner" id="error-banner"></div>
+
+            <!-- ══ VIEW: Scanner ══════════════════════════════════════════════ -->
+            <main class="view active" id="view-scanner">
+
+                <div class="view-header">
+                    <h2>Analyze Target</h2>
+                    <p class="view-desc">Run passive and active security checks against a target URL.</p>
+                </div>
+
+                <!-- URL Input + Scan buttons -->
+                <div class="target-card">
+                    <div class="target-input-wrap">
+                        <i class="fa fa-globe target-icon"></i>
+                        <input type="url" id="target-url" placeholder="Enter target URL (e.g., https://example.com)"
+                            autocomplete="off">
+                    </div>
+
+                    <div class="scan-options">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="chk-headers" checked>
+                            <span class="checkmark"></span>
+                            Header Analysis
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="chk-js" checked>
+                            <span class="checkmark"></span>
+                            JS Inspection
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="chk-active">
+                            <span class="checkmark"></span>
+                            Active OWASP Tests
+                        </label>
+                    </div>
+
+                    <div class="scan-btn-row">
+                        <button id="scan-btn" class="btn btn-primary btn-lg">
+                            <i class="fa fa-play"></i> Start Scan
+                        </button>
+                        <button id="active-scan-btn" class="btn btn-danger">
+                            <i class="fa fa-flask"></i> Active OWASP Scan
+                        </button>
+                        <button id="manual-owasp-btn" class="btn btn-ghost">
+                            <i class="fa fa-shield-halved"></i> Header Audit
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loader -->
+                <div id="loader" class="loader-bar hidden">
+                    <div class="loader-bar-inner"></div>
+                    <p id="loader-text">Scanning…</p>
+                </div>
+
+                <!-- ── Active OWASP Results ─────────────────────────────────── -->
+                <div id="active-results" class="result-card hidden">
+                    <div class="result-card-header">
+                        <span><i class="fa fa-flask"></i> Active OWASP Scan Results</span>
+                        <div class="finding-counts">
+                            <span id="count-critical" class="count-badge critical">0 Critical</span>
+                            <span id="count-high" class="count-badge high">0 High</span>
+                            <span id="count-medium" class="count-badge medium">0 Medium</span>
+                            <span id="count-low" class="count-badge low">0 Low</span>
+                        </div>
+                    </div>
+                    <div id="active-phase" class="phase-text"></div>
+                    <div id="active-progress-container" class="progress-wrap hidden">
+                        <div class="progress-track">
+                            <div id="active-progress-bar" class="progress-fill" style="width:0%"></div>
+                        </div>
+                    </div>
+                    <div id="findings-container">
+                        <p id="no-findings" class="empty-msg">Results will appear here as the scan runs…</p>
+                    </div>
+                </div>
+
+                <!-- ── Quick Scan Results ───────────────────────────────────── -->
+                <div id="results" class="result-card hidden">
+                    <div class="result-card-header">
+                        <span><i class="fa fa-chart-bar"></i> Scan Results</span>
+                    </div>
+                    <div class="tabs" role="tablist">
+                        <button class="tab-btn active" data-tab="owasp" role="tab">OWASP Headers</button>
+                        <button class="tab-btn" data-tab="dirs" role="tab">Dir Scan</button>
+                        <button class="tab-btn" data-tab="js" role="tab">JS Analysis</button>
+                    </div>
+
+                    <div id="owasp" class="tab-content active" role="tabpanel">
+                        <h3>Security Headers</h3>
+                        <ul id="header-list"></ul>
+                        <h3>Information Disclosure</h3>
+                        <ul id="info-list">
+                            <li class="empty-msg">None detected.</li>
+                        </ul>
+                    </div>
+
+                    <div id="dirs" class="tab-content" role="tabpanel">
+                        <h3>Discovered Paths</h3>
+                        <table id="dir-table">
+                            <thead>
+                                <tr>
+                                    <th>URL</th>
+                                    <th>Status</th>
+                                    <th>Size</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dir-table-body"></tbody>
+                        </table>
+                        <p id="dir-empty" class="empty-msg">No paths found yet.</p>
+                    </div>
+
+                    <div id="js" class="tab-content" role="tabpanel">
+                        <h3>JavaScript File Analysis</h3>
+                        <div id="js-list"></div>
+                    </div>
+                </div>
+
+                <!-- ── AI Panel (state rendered by JS) ─────────────────── -->
+                <div id="ai-panel" class="hidden"></div>
+
+                <!-- ── AI Results Panel ──────────────────────────────────── -->
+                <div id="ai-results" class="result-card hidden">
+                    <div class="result-card-header">
+                        <span><i class="fa fa-robot"></i> AI-Powered Analysis — Drana Infinity</span>
+                        <button id="regenerateAiBtn" class="top-btn ghost btn-sm">
+                            <i class="fa fa-rotate-right"></i> Regenerate
+                        </button>
+                    </div>
+                    <!-- Install progress log -->
+                    <pre id="ai-install-log" class="ai-install-log hidden"></pre>
+                    <!-- Analysis output -->
+                    <div id="ai-content" class="ai-output"></div>
+                </div>
+
+            </main>
+
+            <!-- ══ VIEW: Fuzzer ═══════════════════════════════════════════════ -->
+            <main class="view hidden" id="view-fuzzer">
+
+                <div class="view-header">
+                    <h2>Directory Fuzzer</h2>
+                    <p class="view-desc">Upload a wordlist (<code>.txt</code>, one path per line) to brute-force
+                        directories on the target URL.</p>
+                </div>
+
+                <div class="target-card">
+                    <div class="target-input-wrap">
+                        <i class="fa fa-globe target-icon"></i>
+                        <input type="url" id="fuzz-target-url" placeholder="Target URL for fuzzing" autocomplete="off">
+                    </div>
+                    <div class="scan-btn-row">
+                        <label class="file-label" for="wordlist-input">
+                            <i class="fa fa-folder-open"></i>
+                            <span id="file-name-display">Choose wordlist (.txt)</span>
+                            <input type="file" id="wordlist-input" accept=".txt,text/plain" style="display:none;">
+                        </label>
+                        <button id="fuzz-toggle-btn" class="btn btn-success">
+                            <i class="fa fa-play"></i> Start Attack
+                        </button>
+                    </div>
+                </div>
+
+                <div id="fuzz-progress-container" class="result-card hidden">
+                    <div class="progress-wrap">
+                        <div class="progress-track">
+                            <div id="fuzz-progress-bar" class="progress-fill" style="width:0%"></div>
+                        </div>
+                    </div>
+                    <p id="fuzz-status-text" class="phase-text">Initialising…</p>
+                </div>
+
+                <div id="fuzz-results-container" class="result-card hidden">
+                    <div class="result-card-header">
+                        <span><i class="fa fa-folder-tree"></i> Fuzz Results</span>
+                        <span id="fuzz-found-count" class="count-badge low">0 found</span>
+                    </div>
+                    <table id="fuzz-table">
+                        <thead>
+                            <tr>
+                                <th>Path</th>
+                                <th>Status</th>
+                                <th>Size</th>
+                                <th>Full URL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fuzz-table-body"></tbody>
+                    </table>
+                </div>
+
+                <!-- ── Fuzzer AI Panel ────────────────────────────────────── -->
+                <div id="fuzzer-ai-panel" class="hidden"></div>
+                <div id="fuzzer-ai-results" class="result-card hidden">
+                    <div class="result-card-header">
+                        <span><i class="fa fa-robot"></i> AI Analysis — Fuzzer Results</span>
+                        <button id="fuzzerRegenBtn" class="top-btn ghost btn-sm">
+                            <i class="fa fa-rotate-right"></i> Regenerate
+                        </button>
+                    </div>
+                    <div id="fuzzer-ai-content" class="ai-output"></div>
+                </div>
+
+            </main>
+
+            <!-- ══ VIEW: Analyzer ════════════════════════════════════════════ -->
+            <main class="view hidden" id="view-analyzer">
+
+                <div class="view-header">
+                    <h2>Request / Response Analyzer</h2>
+                    <p class="view-desc">Paste raw HTTP traffic to detect misconfigurations and reflected parameters.
+                    </p>
+                </div>
+
+                <div class="result-card">
+                    <div class="textarea-group">
+                        <div>
+                            <label for="raw-req"><i class="fa fa-arrow-up"></i> Raw HTTP Request</label>
+                            <textarea id="raw-req" placeholder="GET / HTTP/1.1&#10;Host: example.com"></textarea>
+                        </div>
+                        <div>
+                            <label for="raw-res"><i class="fa fa-arrow-down"></i> Raw HTTP Response</label>
+                            <textarea id="raw-res" placeholder="HTTP/1.1 200 OK&#10;Content-Type: text/html"></textarea>
+                        </div>
+                    </div>
+                    <button id="analyze-btn" class="btn btn-primary">
+                        <i class="fa fa-magnifying-glass"></i> Analyze Traffic
+                    </button>
+                    <div id="analyze-results" class="hidden" style="margin-top:20px;">
+                        <h3>Findings</h3>
+                        <ul id="findings-list"></ul>
+                    </div>
+                </div>
+
+                <!-- ── Analyzer AI Panel ─────────────────────────────────── -->
+                <div id="analyzer-ai-panel" class="hidden"></div>
+                <div id="analyzer-ai-results" class="result-card hidden">
+                    <div class="result-card-header">
+                        <span><i class="fa fa-robot"></i> AI Analysis — Traffic Findings</span>
+                        <button id="analyzerRegenBtn" class="top-btn ghost btn-sm">
+                            <i class="fa fa-rotate-right"></i> Regenerate
+                        </button>
+                    </div>
+                    <div id="analyzer-ai-content" class="ai-output"></div>
+                </div>
+
+            </main>
+
+            <footer class="app-footer">
+                404 &mdash; AI-Powered Web Vulnerability Scanner
+            </footer>
+
+        </div><!-- /main-wrapper -->
+    </div><!-- /app-shell -->
+
+    <script src="script.js"></script>
+</body>
+
+</html>

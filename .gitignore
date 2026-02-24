@@ -1,0 +1,48 @@
+# ── Node ──────────────────────────────────────────────────────────────────────
+node_modules/
+.npm
+.pnp
+.pnp.js
+
+# ── Secrets / Environment (NEVER commit) ─────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Local system / Replit artefacts ──────────────────────────────────────────
+.local/
+.replit
+replit.nix
+.cache/
+
+# ── Databases (may contain tokens) ───────────────────────────────────────────
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+
+# ── Build output ──────────────────────────────────────────────────────────────
+dist/
+build/
+out/
+.next/
+
+# ── OS / Editor ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# ── Misc ───────────────────────────────────────────────────────────────────────
+*.tgz
+coverage/
+tmp/
+temp/
