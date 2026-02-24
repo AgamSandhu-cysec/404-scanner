@@ -4,6 +4,28 @@ node_modules/
 .pnp
 .pnp.js
 
+# ── Zip / archive artefacts ──────────────────────────────────────────────────
+*.zip
+*.tar.gz
+*.tgz
+
+# ── Backup / leftover files ──────────────────────────────────────────────────
+*.bak
+attached_assets/
+attached_assets.zip
+aiService.js
+replit.md
+components.json
+drizzle.config.ts
+tailwind.config.ts
+postcss.config.js
+vite.config.ts
+package.server.json
+gitignore
+
+.pnp
+.pnp.js
+
 # ── Secrets / Environment (NEVER commit) ─────────────────────────────────────
 .env
 .env.*

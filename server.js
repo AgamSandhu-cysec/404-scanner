@@ -48,7 +48,7 @@ const PORT = process.env.PORT || 5000;
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(morgan('dev'));
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'docs')));
 
 // ── AI Routes ────────────────────────────────────────────────────────────────
 app.use('/api/ai', aiRoutes);
