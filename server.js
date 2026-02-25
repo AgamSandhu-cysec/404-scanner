@@ -21,6 +21,7 @@
 import 'dotenv/config';
 
 import express from 'express';
+import cors from 'cors';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import PDFDocument from 'pdfkit';
@@ -47,6 +48,7 @@ const PORT = process.env.PORT || 5000;
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(morgan('dev'));
+app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'docs')));
 
@@ -637,7 +639,12 @@ app.post('/api/report', (req, res) => {
     doc.end();
 });
 
-// ── Start ─────────────────────────────────────────────────────────────────────
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🛡️  NexusGuard v2 running → http://localhost:${PORT}\n`);
-});
+// ── Start (only when run directly, not when imported by Vercel) ──────────────
+// When Vercel imports this file via api/index.js it does NOT call app.listen().
+if (import.meta.url === `file://${process.argv[1]}`) {
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`\n🛡️  NexusGuard v2 running → http://localhost:${PORT}\n`);
+    });
+}
+
+export default app;
