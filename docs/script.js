@@ -28,6 +28,69 @@ const tabPayloadCache = { scanner: null, fuzzer: null, analyzer: null };
 
 const severityCounts = { Critical: 0, High: 0, Medium: 0, Low: 0 };
 
+// ── Vercel / Ollama-direct detection ─────────────────────────────────────────
+// When deployed on Vercel, the backend cannot reach localhost:11434 on the
+// user's machine — but the BROWSER can. So we detect Vercel and call Ollama
+// directly from the browser (Option A).
+const isVercel = !['localhost', '127.0.0.1'].includes(location.hostname);
+const OLLAMA_DIRECT = 'http://localhost:11434';
+const DRANA_MODEL = 'IHA089/drana-infinity-v1';
+
+/** Check if Ollama is reachable + model loaded, directly from browser */
+async function checkOllamaLocal() {
+    try {
+        const res = await fetch(`${OLLAMA_DIRECT}/api/tags`, { signal: AbortSignal.timeout(4000) });
+        if (!res.ok) return { installed: false, running: false, modelReady: false, models: [] };
+        const data = await res.json();
+        const models = (data.models || []).map(m => m.name);
+        const modelReady = models.some(m => m.toLowerCase().includes('drana-infinity'));
+        return { installed: true, running: true, modelReady, models };
+    } catch {
+        return { installed: false, running: false, modelReady: false, models: [] };
+    }
+}
+
+/** Call Ollama /api/generate directly from the browser */
+async function callOllamaDirect(payload) {
+    const prompt = buildPromptLocal(payload);
+    const res = await fetch(`${OLLAMA_DIRECT}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: DRANA_MODEL, prompt, stream: false })
+    });
+    if (!res.ok) throw new Error(`Ollama returned HTTP ${res.status}`);
+    const data = await res.json();
+    return data.response || '(No response from model)';
+}
+
+/** Build the same prompts as aiService.js — replicated client-side */
+function buildPromptLocal(data) {
+    const type = data.scanType || 'scanner';
+    const fmtHeaders = h => Object.entries(h || {}).map(([k, v]) => `  • ${k}: ${v}`).join('\n') || '  None detected.';
+    const fmtDirs = dirs => dirs.length ? dirs.slice(0, 30).map(d => `  • ${typeof d === 'object' ? d.url || JSON.stringify(d) : d}`).join('\n') : '  None found.';
+    const fmtJs = js => js.length ? js.map(j =>
+        `  Script: ${j.url}\n` +
+        (j.secrets?.length ? `    Secrets: ${j.secrets.join(', ')}\n` : '') +
+        (j.dangerousFunctions?.length ? `    Dangerous Fns: ${j.dangerousFunctions.join(', ')}\n` : '') +
+        (j.endpoints?.length ? `    Endpoints: ${j.endpoints.slice(0, 5).join(', ')}` : '')
+    ).join('\n\n') : '  No JavaScript files analyzed.';
+    const fmtFindings = f => f.length ? f.map(x => `  [${x.severity || '?'}] ${x.name || x.issue || JSON.stringify(x)}`).join('\n') : '  No active vulnerability findings.';
+
+    if (type === 'fuzzer') {
+        const { targetUrl = 'Unknown', date = new Date().toISOString(), directories = [], foundCount = 0 } = data;
+        const interesting = directories.filter(d => { const s = String(d.status || ''); return s.startsWith('2') || s.startsWith('3') || s === '401' || s === '403'; });
+        const fmtPaths = arr => arr.length ? arr.slice(0, 40).map(d => `  [${d.status}] ${d.url || d.path}`).join('\n') : '  (none)';
+        return `You are Drana-Infinity, a senior offensive-security researcher specializing in directory and path enumeration.\n\nI ran a directory fuzzer against a web target. Analyze the discovered paths for security implications.\n\n=== FUZZER RESULTS ===\nTarget URL:    ${targetUrl}\nScan Date:     ${date}\nPaths Found:   ${foundCount}\n\n=== INTERESTING PATHS (2xx/3xx/401/403) ===\n${fmtPaths(interesting)}\n\n=== ALL DISCOVERED PATHS ===\n${fmtPaths(directories)}\n\n=== ANALYSIS REQUEST ===\nPlease provide:\n1. **Executive Summary** — What does this attack surface reveal?\n2. **High-Value Targets** — Which paths are most interesting for exploitation?\n3. **Sensitive Paths** — Admin panels, config files, backups, API endpoints.\n4. **Authentication Bypass Clues** — What do 403/401 responses hint at?\n5. **Follow-up Attacks** — What to try next (IDOR, parameter fuzzing, auth bypass payloads).\n6. **Wordlist Recommendations** — Suggest next wordlists or extensions to try.\n\nFormat with markdown ## headings and \`\`\`code blocks\`\`\` for command examples.`;
+    }
+    if (type === 'analyzer') {
+        const { targetUrl = 'Unknown', date = new Date().toISOString(), rawRequest = '', rawResponse = '', activeFindings = [] } = data;
+        return `You are Drana-Infinity, a senior web security researcher specializing in HTTP traffic analysis.\n\nI have captured raw HTTP request/response traffic for you to analyze.\n\n=== TARGET ===\nURL:  ${targetUrl}\nDate: ${date}\n\n=== RAW HTTP REQUEST ===\n\`\`\`http\n${rawRequest || '(not provided)'}\n\`\`\`\n\n=== RAW HTTP RESPONSE ===\n\`\`\`http\n${rawResponse || '(not provided)'}\n\`\`\`\n\n=== STATIC ANALYSIS FINDINGS ===\n${fmtFindings(activeFindings)}\n\n=== ANALYSIS REQUEST ===\nPlease provide:\n1. **Executive Summary** — What does this traffic reveal?\n2. **Security Header Review** — Missing or misconfigured HTTP security headers.\n3. **Reflected Parameters** — Any user input reflected in the response (XSS vectors).\n4. **Sensitive Data Exposure** — Tokens, credentials, internal paths, stack traces.\n5. **Session & Cookie Security** — Cookie flags, session fixation risks.\n6. **Injection Vectors** — Parameters that could be injectable.\n7. **Remediation** — Prioritized fixes.\n\nFormat with markdown ## headings, bullet points, and \`\`\`code blocks\`\`\` for payloads.`;
+    }
+    // scanner (default)
+    const { targetUrl = 'Unknown', date = new Date().toISOString(), owasp = {}, directories = [], jsAnalysis = [], activeFindings = [] } = data;
+    return `You are Drana-Infinity, a senior cybersecurity researcher and penetration tester AI.\n\nI have performed a security scan and need your expert analysis.\n\n=== SCAN DETAILS ===\nTarget URL: ${targetUrl}\nScan Date:  ${date}\n\n=== OWASP SECURITY HEADERS ===\n${fmtHeaders(owasp.headers)}\n\n=== ACTIVE VULNERABILITY FINDINGS ===\n${fmtFindings(activeFindings)}\n\n=== DISCOVERED DIRECTORIES ===\n${fmtDirs(directories)}\n\n=== JAVASCRIPT ANALYSIS ===\n${fmtJs(jsAnalysis)}\n\n=== ANALYSIS REQUEST ===\nPlease provide:\n1. **Executive Summary** — Overall risk level (Critical/High/Medium/Low).\n2. **Severity Assessment** — Rate each finding with CVSS context.\n3. **Exploitation Guidance** — Step-by-step for the top 3 critical issues.\n4. **Payload Examples** — Ready-to-use payloads for XSS, SQLi, SSTI, etc.\n5. **Attack Chaining** — Opportunities to chain vulnerabilities.\n6. **Remediation Roadmap** — Prioritized developer fix list.\n7. **Bug Bounty Notes** — Estimated CVSS + bounty tier per critical finding.\n\nFormat with markdown ## headings, bullet points, and \`\`\`code blocks\`\`\` for all payloads.`;
+}
+
 // In-memory scan history (mock initially, augmented by real scans)
 const scanHistory = [
     { domain: 'example.com', date: 'Feb 24, 09:49', status: 'completed' },
@@ -695,8 +758,9 @@ const aiInstallLog = $('ai-install-log');
 const aiContent = $('ai-content');
 const aiRegenBtn = $('regenerateAiBtn');
 
-// ── 8a. Fetch status from backend ────────────────────────────────────────────
+// ── 8a. Fetch status from backend (or direct on Vercel) ─────────────────────
 async function checkAiStatus() {
+    if (isVercel) return checkOllamaLocal();
     try {
         const res = await fetch('/api/ai/status');
         if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -880,18 +944,23 @@ async function requestAiAnalysis() {
     aiContent.innerHTML = '<div class="ai-thinking">Drana Infinity is analysing the findings…</div>';
 
     try {
-        const res = await fetch('/api/ai/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-
-        if (!res.ok || data.error) {
-            aiContent.innerHTML = `<p class="empty-msg" style="color:var(--red)">❌ ${escapeHtml(data.error || 'Analysis failed')}</p>`;
-            return;
+        let insight;
+        if (isVercel) {
+            insight = await callOllamaDirect(payload);
+        } else {
+            const res = await fetch('/api/ai/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                aiContent.innerHTML = `<p class="empty-msg" style="color:var(--red)">❌ ${escapeHtml(data.error || 'Analysis failed')}</p>`;
+                return;
+            }
+            insight = data.insight;
         }
-        renderAiInsight(data.insight);
+        renderAiInsight(insight);
     } catch (err) {
         aiContent.innerHTML = `<p class="empty-msg" style="color:var(--red)">❌ AI error: ${escapeHtml(err.message)}</p>`;
     }
@@ -950,18 +1019,24 @@ async function analyzeTab(tab, payload) {
     $(els.content).innerHTML = '<div class="ai-thinking">Drana Infinity is analysing the findings…</div>';
 
     try {
-        const res = await fetch('/api/ai/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-            $(els.content).innerHTML = `<p class="empty-msg" style="color:var(--red)">❌ ${escapeHtml(data.error || 'Analysis failed')}</p>`;
-            return;
+        let insight;
+        if (isVercel) {
+            insight = await callOllamaDirect(payload);
+        } else {
+            const res = await fetch('/api/ai/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                $(els.content).innerHTML = `<p class="empty-msg" style="color:var(--red)">❌ ${escapeHtml(data.error || 'Analysis failed')}</p>`;
+                return;
+            }
+            insight = data.insight;
         }
-        tabAiCache[tab] = data.insight;
-        renderTabInsight(els.content, data.insight);
+        tabAiCache[tab] = insight;
+        renderTabInsight(els.content, insight);
     } catch (err) {
         $(els.content).innerHTML = `<p class="empty-msg" style="color:var(--red)">❌ AI error: ${escapeHtml(err.message)}</p>`;
     }
