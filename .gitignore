@@ -13,7 +13,7 @@ node_modules/
 *.bak
 attached_assets/
 attached_assets.zip
-aiService.js
+
 replit.md
 components.json
 drizzle.config.ts
